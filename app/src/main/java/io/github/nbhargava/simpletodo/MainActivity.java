@@ -11,20 +11,19 @@ import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
 
-import org.apache.commons.io.FileUtils;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
+import java.util.List;
 
 
 public class MainActivity extends ActionBarActivity {
 
-    ArrayList<String> items;
-    ArrayAdapter<String> itemsAdapter;
+    private ItemsDatabaseHelper database;
+    List<TodoItem> items;
+    ArrayAdapter<TodoItem> itemsAdapter;
     ListView lvItems;
 
     private final int EDIT_REQUEST_CODE = 20;
+
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -32,7 +31,7 @@ public class MainActivity extends ActionBarActivity {
         setContentView(R.layout.activity_main);
         lvItems = (ListView)findViewById(R.id.lvItems);
         readItems();
-        itemsAdapter = new ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, items);
+        itemsAdapter = new ArrayAdapter<TodoItem>(this, android.R.layout.simple_list_item_1, items);
         lvItems.setAdapter(itemsAdapter);
         setupListViewListeners();
     }
@@ -40,18 +39,19 @@ public class MainActivity extends ActionBarActivity {
     public void onAddItem(View view) {
         EditText etNewItem = (EditText)findViewById(R.id.etNewItem);
         String itemText = etNewItem.getText().toString();
-        itemsAdapter.add(itemText);
+        TodoItem newItem = database.addTodoItem(itemText);
+        itemsAdapter.add(newItem);
         etNewItem.setText("");
-        writeItems();
     }
 
     private void setupListViewListeners() {
         lvItems.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             @Override
             public boolean onItemLongClick(AdapterView<?> adapter, View item, int pos, long id) {
-                items.remove(pos);
+                TodoItem removedItem = items.remove(pos);
                 itemsAdapter.notifyDataSetChanged();
-                writeItems();
+
+                database.deleteTodoItem(removedItem);
                 return true;
             }
         });
@@ -60,7 +60,7 @@ public class MainActivity extends ActionBarActivity {
             @Override
             public void onItemClick(AdapterView<?> adapter, View item, int pos, long id) {
                 Intent editIntent = new Intent(MainActivity.this, EditItemActivity.class);
-                editIntent.putExtra("item_description", items.get(pos));
+                editIntent.putExtra("item_description", items.get(pos).getItem());
                 editIntent.putExtra("item_position", pos);
                 startActivityForResult(editIntent, EDIT_REQUEST_CODE);
             }
@@ -68,32 +68,18 @@ public class MainActivity extends ActionBarActivity {
     }
 
     private void readItems() {
-        File filesDir = getFilesDir();
-        File todoFile = new File(filesDir, "todo.txt");
-        try {
-            items = new ArrayList<String>(FileUtils.readLines(todoFile));
-        } catch (IOException ex) {
-            items = new ArrayList<String>();
-        }
-    }
-
-    private void writeItems() {
-        File filesDir = getFilesDir();
-        File todoFile = new File(filesDir, "todo.txt");
-        try {
-            FileUtils.writeLines(todoFile, items);
-        } catch (IOException ex) {
-            ex.printStackTrace();
-        }
+        database = ItemsDatabaseHelper.getInstance(this);
+        items = database.getAllItems();
     }
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == EDIT_REQUEST_CODE && resultCode == RESULT_OK) {
             int pos = data.getIntExtra("item_position", 0);
-            items.set(pos, data.getStringExtra("item_description"));
+            TodoItem oldItem = items.get(pos);
+            TodoItem newItem = database.editTodoItem(oldItem, data.getStringExtra("item_description"));
+            items.set(pos, newItem);
             itemsAdapter.notifyDataSetChanged();
-            writeItems();
         }
     }
 
